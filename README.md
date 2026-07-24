@@ -9,7 +9,7 @@ The application models a regulated QMS complaint workflow: customer complaint in
 - Frontend: React, TypeScript, Redux Toolkit, Vite, Inter font
 - Backend: FastAPI, SQLAlchemy, Pydantic
 - AI agent framework: LangGraph
-- LLM provider: Groq, default model `gemma2-9b-it`
+- LLM provider: Groq, default model `llama-3.1-8b-instant`
 - Database: PostgreSQL
 
 ## Quick Start
@@ -26,7 +26,7 @@ docker compose up -d db
 cp backend/.env.example backend/.env
 ```
 
-Set `GROQ_API_KEY` when you are ready to use live AI extraction. Without it, the backend returns a deterministic development extraction.
+Set `GROQ_API_KEY` when you are ready to use live AI extraction. Without it, or for very short inputs, the backend returns a deterministic development extraction.
 
 3. Run the backend:
 
@@ -56,4 +56,3 @@ The complaint module is designed around pharmaceutical QMS expectations:
 - QA triage determines whether the complaint indicates a possible specification failure, patient risk, adverse event, recall signal, deviation, or CAPA need.
 - API and FDF contexts require batch traceability, expiry/manufacturing dates, strength or grade, impacted quantity, and manufacturing site visibility.
 - AI output is assistive only. Regulated decisions remain owned by qualified QA users.
-

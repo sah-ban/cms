@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.complaint_graph import complaint_graph
+from app.ai.complaint_graph import answer_complaint_question, complaint_graph
 from app.db.models import Complaint
 from app.db.session import get_db
-from app.schemas import ComplaintCreate, ComplaintRead, IntakeExtraction, IntakeRequest
+from app.schemas import ChatRequest, ChatResponse, ComplaintCreate, ComplaintRead, IntakeExtraction, IntakeRequest
 
 router = APIRouter()
 
@@ -34,3 +34,8 @@ def extract_complaint(payload: IntakeRequest) -> dict:
     state = complaint_graph.invoke({"text": payload.text, "extraction": {}})
     return state["extraction"]
 
+
+@router.post("/ai/chat", response_model=ChatResponse)
+def chat_with_assistant(payload: ChatRequest) -> ChatResponse:
+    result = answer_complaint_question(payload.question, payload.complaint)
+    return ChatResponse(**result)

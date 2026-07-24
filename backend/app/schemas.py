@@ -55,3 +55,12 @@ class IntakeExtraction(BaseModel):
     ai_summary: str = ""
     ai_risk_flags: list[str] = []
 
+
+class ChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    complaint: dict[str, str] = Field(default_factory=dict)
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    updates: dict[str, str] = Field(default_factory=dict)

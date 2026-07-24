@@ -1,7 +1,7 @@
-import { AlertTriangle, Bot, Calendar, CheckCircle2, ClipboardList, RotateCcw, Save, Send, Sparkles, UploadCloud } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { AlertTriangle, Bot, Calendar, ClipboardList, RotateCcw, Save, Send, Sparkles } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "./hooks";
-import { extractComplaint, resetForm, saveComplaint, updateField } from "./features/complaints/complaintsSlice";
+import { askComplaintAssistant, resetForm, saveComplaint, updateField } from "./features/complaints/complaintsSlice";
 import type { ComplaintForm } from "./features/complaints/types";
 
 type FieldConfig = {
@@ -11,6 +11,12 @@ type FieldConfig = {
   span?: "full";
   suffix?: string;
   options?: string[];
+};
+
+type ChatMessage = {
+  id: number;
+  role: "assistant" | "user";
+  content: string;
 };
 
 const sections: { title: string; fields: FieldConfig[] }[] = [
@@ -142,15 +148,50 @@ function ComplaintFormPanel() {
 
 function AssistantPanel() {
   const dispatch = useAppDispatch();
-  const [text, setText] = useState("");
-  const { extractionProgress, assistantMessage, assistantStatus, savedCount, form } = useAppSelector((state) => state.complaints);
+  const [composerText, setComposerText] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 1,
+      role: "assistant",
+      content: "Paste complaint text, ask a triage question, or tell me to update a field in the complaint record."
+    }
+  ]);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const nextMessageId = useRef(2);
+  const { assistantStatus, savedCount, form } = useAppSelector((state) => state.complaints);
 
-  const handleExtract = (event: FormEvent) => {
+  useEffect(() => {
+    transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
+
+  const addMessage = (role: ChatMessage["role"], content: string) => {
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      {
+        id: nextMessageId.current++,
+        role,
+        content
+      }
+    ]);
+  };
+
+  const handleChatSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (text.trim()) {
-      dispatch(extractComplaint(text.trim()));
+    const trimmedMessage = composerText.trim();
+    if (trimmedMessage) {
+      addMessage("user", trimmedMessage);
+      setComposerText("");
+
+      try {
+        const response = await dispatch(askComplaintAssistant({ question: trimmedMessage, complaint: form })).unwrap();
+        addMessage("assistant", response.answer);
+      } catch {
+        addMessage("assistant", "I could not answer right now. Check the backend connection and Groq configuration.");
+      }
     }
   };
+
+  const isWorking = assistantStatus === "extracting" || assistantStatus === "chatting";
 
   return (
     <aside className="panel assistant-panel" aria-labelledby="assistant-title">
@@ -162,49 +203,19 @@ function AssistantPanel() {
         <span className="beta-pill">BETA</span>
       </header>
 
-      <div className="drop-zone">
-        <UploadCloud size={32} />
-        <strong>Drag & drop complaint document here</strong>
-        <span>or click to browse</span>
-      </div>
-
-      <div className="divider">OR</div>
-
-      <form onSubmit={handleExtract} className="paste-card">
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="Paste Complaint Text / Email"
-          aria-label="Paste complaint text or email"
-        />
-        <button type="submit" className="primary-button icon-button" disabled={!text.trim() || assistantStatus === "extracting"}>
-          <Send size={18} />
-        </button>
-      </form>
-
-      <div className="supported">
-        <CheckCircle2 size={16} />
-        <span>Supported formats: PDF, DOCX, TXT, EML</span>
-        <small>Max file size: 10MB</small>
-      </div>
-
-      <div className="progress-block">
-        <div className="progress-title">
-          <span>Extraction Progress</span>
-          <strong>{extractionProgress}%</strong>
-        </div>
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${extractionProgress}%` }} />
-        </div>
-        <p>{assistantStatus === "extracting" ? "Analyzing document content and extracting key details..." : "Ready for complaint intake."}</p>
-      </div>
-
-      <div className={`assistant-message ${assistantStatus}`}>
-        <Bot size={24} />
-        <div>
-          <h3>AI Assistant</h3>
-          <p>{assistantMessage}</p>
-        </div>
+      <div className="chat-transcript" ref={transcriptRef}>
+        {messages.map((message) => (
+          <div key={message.id} className={`chat-message ${message.role}`}>
+            {message.role === "assistant" && <Bot size={18} aria-hidden="true" />}
+            <p>{message.content}</p>
+          </div>
+        ))}
+        {isWorking && (
+          <div className="chat-message assistant">
+            <Bot size={18} aria-hidden="true" />
+            <p>{assistantStatus === "extracting" ? "Extracting complaint details..." : "Reviewing the current complaint context..."}</p>
+          </div>
+        )}
       </div>
 
       <div className="qa-context">
@@ -222,12 +233,22 @@ function AssistantPanel() {
         </dl>
       </div>
 
-      <div className="chat-input">
-        <input placeholder="Ask me anything about this complaint..." />
-        <button className="primary-button icon-button" aria-label="Send assistant question">
+      <form onSubmit={handleChatSubmit} className="chat-composer">
+        <textarea
+          value={composerText}
+          onChange={(event) => setComposerText(event.target.value)}
+          placeholder="Paste complaint text or ask about this complaint..."
+          aria-label="Ask assistant about this complaint"
+        />
+        <button
+          type="submit"
+          className="primary-button icon-button"
+          aria-label="Send message"
+          disabled={!composerText.trim() || isWorking}
+        >
           <Send size={18} />
         </button>
-      </div>
+      </form>
       <p className="disclaimer">AI responses may contain errors. Please verify information.</p>
     </aside>
   );
@@ -241,4 +262,3 @@ export default function App() {
     </main>
   );
 }
-

@@ -21,3 +21,7 @@ export type IntakeExtraction = Omit<ComplaintForm, "status" | "ai_risk_flags"> &
   ai_risk_flags: string[];
 };
 
+export type ChatResponse = {
+  answer: string;
+  updates: Partial<ComplaintForm>;
+};

@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import date
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -23,9 +24,66 @@ Use empty strings when unknown. ai_risk_flags must be a JSON array of short stri
 Severity should be Low, Medium, High, or Critical. Priority should be Pending, QA Review,
 Investigation, CAPA Review, Recall Assessment, or Pharmacovigilance Review."""
 
+CHAT_SYSTEM_PROMPT = """You are a pharmaceutical QMS complaint assistant.
+Use the current complaint record and user message to answer questions and update fields.
+Return only valid JSON with this shape:
+{"answer":"short assistant response","updates":{"field_name":"new value"}}
+
+Allowed update fields:
+complaint_source, customer_name, product_name, product_strength_grade, batch_lot_number,
+manufacturing_date, expiry_date, quantity_affected, complaint_type, complaint_date,
+description, initial_severity, priority, status, ai_summary, ai_risk_flags.
+
+If the user provides raw complaint text, extract relevant fields into updates.
+If the user corrects prior information, update the most likely field from context.
+For relative dates like today, use the provided current date.
+Use YYYY-MM-DD for full dates. Use product_name for the name only and product_strength_grade
+for strength/grade such as 250mg, API grade, or FDF strength.
+Leave updates empty when no field should change.
+Keep answers concise and tell the user to review regulated fields before saving."""
+
+ALLOWED_CHAT_UPDATE_FIELDS = {
+    "complaint_source",
+    "customer_name",
+    "product_name",
+    "product_strength_grade",
+    "batch_lot_number",
+    "manufacturing_date",
+    "expiry_date",
+    "quantity_affected",
+    "complaint_type",
+    "complaint_date",
+    "description",
+    "initial_severity",
+    "priority",
+    "status",
+    "ai_summary",
+    "ai_risk_flags",
+}
+
 
 def _normalize_text(text: str) -> str:
     return " ".join(text.split()).strip()
+
+
+def _parse_json_content(content: str) -> dict:
+    normalized = content.strip()
+    if normalized.startswith("```json"):
+        normalized = normalized[7:]
+    elif normalized.startswith("```"):
+        normalized = normalized[3:]
+    if normalized.endswith("```"):
+        normalized = normalized[:-3]
+    normalized = normalized.strip()
+
+    try:
+        return json.loads(normalized)
+    except json.JSONDecodeError:
+        start = normalized.find("{")
+        if start == -1:
+            raise
+        parsed, _ = json.JSONDecoder().raw_decode(normalized[start:])
+        return parsed
 
 
 def _fallback_extract(text: str) -> dict:
@@ -62,6 +120,7 @@ def _fallback_extract(text: str) -> dict:
 
     import re
     product_name = ""
+    product_strength_grade = ""
     batch_lot = ""
     expiry_date = ""
 
@@ -77,11 +136,14 @@ def _fallback_extract(text: str) -> dict:
         
     # Simple check for common products in test data
     if "ibuprofen" in lowered:
-        product_name = "Ibuprofen 200mg"
+        product_name = "Ibuprofen"
+        product_strength_grade = "200mg"
     elif "amoxicillin" in lowered:
-        product_name = "Amoxicillin 500mg"
+        product_name = "Amoxicillin"
+        product_strength_grade = "500mg"
     elif "lisinopril" in lowered:
-        product_name = "Lisinopril 10mg"
+        product_name = "Lisinopril"
+        product_strength_grade = "10mg"
 
     return IntakeExtraction(
         complaint_source="Email" if "@" in text else "Customer communication",
@@ -92,6 +154,7 @@ def _fallback_extract(text: str) -> dict:
         ai_risk_flags=flags or ["Requires QA triage"],
         batch_lot_number=batch_lot,
         product_name=product_name,
+        product_strength_grade=product_strength_grade,
         expiry_date=expiry_date
     ).model_dump()
 
@@ -113,15 +176,7 @@ def _extract_with_groq(state: ComplaintIntakeState) -> ComplaintIntakeState:
             ]
         )
         content = response.content if isinstance(response.content, str) else json.dumps(response.content)
-        content = content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        elif content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        content = content.strip()
-        parsed = json.loads(content)
+        parsed = _parse_json_content(content)
     except Exception as e:
         print(f"Groq API or JSON parsing error: {e}")
         parsed = _fallback_extract(normalized)
@@ -133,6 +188,58 @@ def _extract_with_groq(state: ComplaintIntakeState) -> ComplaintIntakeState:
         extraction = _fallback_extract(normalized)
 
     return {"text": normalized, "extraction": extraction}
+
+
+def answer_complaint_question(question: str, complaint: dict[str, str]) -> dict:
+    normalized_question = _normalize_text(question)
+    populated_fields = {
+        key: value
+        for key, value in complaint.items()
+        if isinstance(value, str) and value.strip()
+    }
+
+    if not normalized_question:
+        return {"answer": "Ask a question or provide complaint details.", "updates": {}}
+
+    context = json.dumps(populated_fields, indent=2)
+    fallback = (
+        "I can help update the complaint record or answer QA triage questions. Review all populated fields before saving."
+    )
+
+    if not settings.groq_api_key:
+        return {"answer": fallback, "updates": {}}
+
+    os.environ["GROQ_API_KEY"] = settings.groq_api_key
+    from langchain_groq import ChatGroq
+
+    llm = ChatGroq(model=settings.groq_context_model, temperature=0)
+    try:
+        response = llm.invoke(
+            [
+                ("system", CHAT_SYSTEM_PROMPT),
+                (
+                    "human",
+                    f"Current date: {date.today().isoformat()}\n"
+                    f"Complaint context:\n{context}\n\n"
+                    f"User message: {normalized_question}",
+                ),
+            ]
+        )
+        content = response.content if isinstance(response.content, str) else json.dumps(response.content)
+        parsed = _parse_json_content(content)
+        updates = parsed.get("updates", {})
+        if not isinstance(updates, dict):
+            updates = {}
+        updates = {
+            key: str(value)
+            for key, value in updates.items()
+            if key in ALLOWED_CHAT_UPDATE_FIELDS and value is not None and str(value).strip()
+        }
+        answer = str(parsed.get("answer", "")).strip() or fallback
+        return {"answer": answer, "updates": updates}
+    except Exception as e:
+        print(f"Groq chat error: {e}")
+        return {"answer": fallback, "updates": {}}
 
 
 def build_complaint_graph():

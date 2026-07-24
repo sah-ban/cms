@@ -1,7 +1,13 @@
-import { AlertTriangle, Bot, Calendar, RotateCcw, Save, Send, Sparkles } from "lucide-react";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { AlertTriangle, Bot, Calendar, RotateCcw, Save, Send, Sparkles, UploadCloud } from "lucide-react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "./hooks";
-import { askComplaintAssistant, resetForm, saveComplaint, updateField } from "./features/complaints/complaintsSlice";
+import {
+  askComplaintAssistant,
+  extractComplaintDocument,
+  resetForm,
+  saveComplaint,
+  updateField
+} from "./features/complaints/complaintsSlice";
 import type { ComplaintForm } from "./features/complaints/types";
 
 type FieldConfig = {
@@ -149,6 +155,7 @@ function ComplaintFormPanel() {
 function AssistantPanel() {
   const dispatch = useAppDispatch();
   const [composerText, setComposerText] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 1,
@@ -191,6 +198,22 @@ function AssistantPanel() {
     }
   };
 
+  const handleDocumentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    addMessage("user", `Uploaded ${file.name}`);
+    try {
+      await dispatch(extractComplaintDocument(file)).unwrap();
+      addMessage("assistant", "I extracted complaint details from the document and populated the form. Review the fields before saving.");
+    } catch {
+      addMessage("assistant", "I could not extract complaint details from that document. Use a readable PDF, DOCX, TXT, or EML file under 10MB.");
+    }
+  };
+
   const isWorking = assistantStatus === "extracting" || assistantStatus === "chatting";
 
   return (
@@ -200,7 +223,26 @@ function AssistantPanel() {
           <Sparkles size={21} />
           <h2 id="assistant-title">AI Complaint Intake Assistant</h2>
         </div>
-        <span className="beta-pill">BETA</span>
+        <div className="assistant-tools">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.eml,application/pdf,text/plain,message/rfc822,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="file-input"
+            onChange={handleDocumentUpload}
+          />
+          <button
+            type="button"
+            className="secondary-button icon-button"
+            aria-label="Upload complaint document"
+            title="Upload complaint document"
+            disabled={isWorking}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <UploadCloud size={18} />
+          </button>
+          <span className="beta-pill">BETA</span>
+        </div>
       </header>
 
       <div className="chat-transcript" ref={transcriptRef}>

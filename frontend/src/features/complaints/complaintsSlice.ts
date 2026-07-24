@@ -36,6 +36,10 @@ const initialState: ComplaintsState = {
   savedCount: 0
 };
 
+const allowedStatuses = ["Pending Triage", "QA Review", "Investigation", "CAPA Required", "Closed"];
+const allowedSeverities = ["Low", "Medium", "High", "Critical"];
+const allowedPriorities = ["Pending", "QA Review", "Investigation", "CAPA Review", "Recall Assessment", "Pharmacovigilance Review"];
+
 const toDateInputValue = (value: string, monthOnlyDay: "first" | "last" = "first") => {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -112,6 +116,15 @@ const normalizeFormPatch = (patch: Partial<ComplaintForm>): Partial<ComplaintFor
     normalizedPatch.product_name = normalizedExtraction.product_name;
     normalizedPatch.product_strength_grade = normalizedExtraction.product_strength_grade;
   }
+  if (normalizedPatch.status && !allowedStatuses.includes(normalizedPatch.status)) {
+    delete normalizedPatch.status;
+  }
+  if (normalizedPatch.initial_severity && !allowedSeverities.includes(normalizedPatch.initial_severity)) {
+    delete normalizedPatch.initial_severity;
+  }
+  if (normalizedPatch.priority && !allowedPriorities.includes(normalizedPatch.priority)) {
+    delete normalizedPatch.priority;
+  }
 
   return normalizedPatch;
 };
@@ -127,6 +140,25 @@ export const extractComplaint = createAsyncThunk<IntakeExtraction, string>(
 
     if (!response.ok) {
       throw new Error("AI extraction failed");
+    }
+
+    return response.json();
+  }
+);
+
+export const extractComplaintDocument = createAsyncThunk<IntakeExtraction, File>(
+  "complaints/extractComplaintDocument",
+  async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch("/api/ai/document", {
+      method: "POST",
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error("Document extraction failed");
     }
 
     return response.json();
@@ -216,6 +248,28 @@ const complaintsSlice = createSlice({
         state.assistantStatus = "error";
         state.extractionProgress = 0;
         state.assistantMessage = "AI extraction could not be completed. Paste less text or check the backend connection.";
+      })
+      .addCase(extractComplaintDocument.pending, (state) => {
+        state.assistantStatus = "extracting";
+        state.extractionProgress = 35;
+        state.assistantMessage = "Reading document text and extracting complaint details.";
+      })
+      .addCase(extractComplaintDocument.fulfilled, (state, action) => {
+        const extraction = normalizeExtraction(action.payload);
+        state.assistantStatus = "idle";
+        state.extractionProgress = 100;
+        state.form = {
+          ...state.form,
+          ...extraction,
+          ai_risk_flags: extraction.ai_risk_flags.join(", "),
+          status: "Pending Triage"
+        };
+        state.assistantMessage = "Document extraction complete. Review every populated field before saving the regulated complaint record.";
+      })
+      .addCase(extractComplaintDocument.rejected, (state) => {
+        state.assistantStatus = "error";
+        state.extractionProgress = 0;
+        state.assistantMessage = "Document extraction could not be completed. Check the file type, file text, and backend connection.";
       })
       .addCase(saveComplaint.pending, (state) => {
         state.assistantStatus = "saving";

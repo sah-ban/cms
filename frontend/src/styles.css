@@ -283,6 +283,16 @@ button:disabled {
   color: #2458de;
 }
 
+.assistant-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-input {
+  display: none;
+}
+
 h2 {
   font-size: 20px;
   line-height: 1.3;

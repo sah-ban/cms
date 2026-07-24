@@ -39,6 +39,9 @@ If the user corrects prior information, update the most likely field from contex
 For relative dates like today, use the provided current date.
 Use YYYY-MM-DD for full dates. Use product_name for the name only and product_strength_grade
 for strength/grade such as 250mg, API grade, or FDF strength.
+Status must be Pending Triage, QA Review, Investigation, CAPA Required, or Closed.
+Severity must be Low, Medium, High, or Critical.
+Priority must be Pending, QA Review, Investigation, CAPA Review, Recall Assessment, or Pharmacovigilance Review.
 Leave updates empty when no field should change.
 Keep answers concise and tell the user to review regulated fields before saving."""
 

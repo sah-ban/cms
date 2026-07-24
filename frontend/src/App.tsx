@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, Calendar, ClipboardList, RotateCcw, Save, Send, Sparkles } from "lucide-react";
+import { AlertTriangle, Bot, Calendar, RotateCcw, Save, Send, Sparkles } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "./hooks";
 import { askComplaintAssistant, resetForm, saveComplaint, updateField } from "./features/complaints/complaintsSlice";
@@ -158,7 +158,7 @@ function AssistantPanel() {
   ]);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const nextMessageId = useRef(2);
-  const { assistantStatus, savedCount, form } = useAppSelector((state) => state.complaints);
+  const { assistantStatus, form } = useAppSelector((state) => state.complaints);
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" });
@@ -216,21 +216,6 @@ function AssistantPanel() {
             <p>{assistantStatus === "extracting" ? "Extracting complaint details..." : "Reviewing the current complaint context..."}</p>
           </div>
         )}
-      </div>
-
-      <div className="qa-context">
-        <div>
-          <ClipboardList size={18} />
-          <span>QMS Routing</span>
-        </div>
-        <dl>
-          <dt>Severity</dt>
-          <dd>{form.initial_severity || "Unclassified"}</dd>
-          <dt>Priority</dt>
-          <dd>{form.priority || "Pending"}</dd>
-          <dt>Saved</dt>
-          <dd>{savedCount}</dd>
-        </dl>
       </div>
 
       <form onSubmit={handleChatSubmit} className="chat-composer">

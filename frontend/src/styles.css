@@ -346,42 +346,6 @@ h2 {
   box-shadow: 0 8px 18px rgba(36, 88, 222, 0.18);
 }
 
-.qa-context {
-  margin-top: 18px;
-  border-top: 1px solid #e5e7eb;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 16px 0;
-}
-
-.qa-context > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #475467;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-dl {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin: 14px 0 0;
-}
-
-dt {
-  color: #667085;
-  font-size: 12px;
-}
-
-dd {
-  margin: 4px 0 0;
-  font-size: 14px;
-  font-weight: 700;
-}
-
 .chat-composer {
   position: relative;
   margin-top: 14px;
@@ -447,8 +411,7 @@ dd {
     flex-direction: column;
   }
 
-  .field-grid,
-  dl {
+  .field-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -43,6 +43,9 @@ Status must be Pending Triage, QA Review, Investigation, CAPA Required, or Close
 Severity must be Low, Medium, High, or Critical.
 Priority must be Pending, QA Review, Investigation, CAPA Review, Recall Assessment, or Pharmacovigilance Review.
 Leave updates empty when no field should change.
+In the answer text shown to users, use readable field labels like Complaint Source,
+Product Name, Product Strength/Grade, Batch/Lot Number, Complaint Date, and AI Summary.
+Do not show snake_case field names like complaint_source or ai_summary in the answer.
 Keep answers concise and tell the user to review regulated fields before saving."""
 
 ALLOWED_CHAT_UPDATE_FIELDS = {
@@ -62,6 +65,25 @@ ALLOWED_CHAT_UPDATE_FIELDS = {
     "status",
     "ai_summary",
     "ai_risk_flags",
+}
+
+FIELD_LABELS = {
+    "complaint_source": "Complaint Source",
+    "customer_name": "Customer Name",
+    "product_name": "Product Name",
+    "product_strength_grade": "Product Strength/Grade",
+    "batch_lot_number": "Batch/Lot Number",
+    "manufacturing_date": "Manufacturing Date",
+    "expiry_date": "Expiry Date",
+    "quantity_affected": "Quantity Affected",
+    "complaint_type": "Complaint Type",
+    "complaint_date": "Complaint Date",
+    "description": "Description",
+    "initial_severity": "Initial Severity",
+    "priority": "Priority",
+    "status": "Status",
+    "ai_summary": "AI Summary",
+    "ai_risk_flags": "AI Risk Flags",
 }
 
 
@@ -87,6 +109,13 @@ def _parse_json_content(content: str) -> dict:
             raise
         parsed, _ = json.JSONDecoder().raw_decode(normalized[start:])
         return parsed
+
+
+def _humanize_field_names(text: str) -> str:
+    humanized = text
+    for field_name, label in FIELD_LABELS.items():
+        humanized = humanized.replace(field_name, label)
+    return humanized
 
 
 def _fallback_extract(text: str) -> dict:
@@ -238,7 +267,7 @@ def answer_complaint_question(question: str, complaint: dict[str, str]) -> dict:
             for key, value in updates.items()
             if key in ALLOWED_CHAT_UPDATE_FIELDS and value is not None and str(value).strip()
         }
-        answer = str(parsed.get("answer", "")).strip() or fallback
+        answer = _humanize_field_names(str(parsed.get("answer", "")).strip() or fallback)
         return {"answer": answer, "updates": updates}
     except Exception as e:
         print(f"Groq chat error: {e}")
